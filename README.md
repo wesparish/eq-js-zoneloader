@@ -99,6 +99,11 @@ Things worth knowing about the data, all verified against the Blackburrow files:
   lists reached via `0x15 -> 0x33 -> 0x32`. All 283 Blackburrow placements have one.
 - **EQ is Z-up**; the renderer maps `(x, y, z)eq -> (x, z, -y)gl`, a rotation about X that
   preserves winding. The HUD reports EQ coordinates so they match `/loc` and map data.
+- **Texture V coordinates are used as-is.** Going from D3D to OpenGL usually means
+  flipping V, but these textures decode with row 0 as the image's top row and GL maps
+  data row 0 to `t=0`, so the two conventions already agree. Flipping renders every
+  sign, banner and shield upside down — subtle enough on rock and grass to miss, obvious
+  the moment you read a tavern sign.
 - **Spawn points come from object placements.** Scoring purely by open space picks the
   *outside* of an enclosed city like Neriak, and the highest-scoring interior spots are
   rooftops — so candidates are drawn from where objects cluster, and the lowest of the

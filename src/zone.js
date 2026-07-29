@@ -58,7 +58,11 @@ class BatchBuilder {
       // EQ -> GL axis swap
       batch.positions.push(x, z, -y);
       batch.normals.push(nx, nz, -ny);
-      batch.uvs.push(mesh.uvs[vi * 2] || 0, -(mesh.uvs[vi * 2 + 1] || 0));
+      // V is used as-is. The textures decode with row 0 = the image's top row, and
+      // GL maps data row 0 to t=0, so EQ's D3D-style "v=0 is the top" already lines
+      // up. Negating v here (the usual D3D->GL correction) renders every sign,
+      // banner and shield in the game upside down.
+      batch.uvs.push(mesh.uvs[vi * 2] || 0, mesh.uvs[vi * 2 + 1] || 0);
       // Placed objects carry their baked lighting per instance (0x32), not in the
       // shared mesh, so prefer the instance list when one was supplied.
       const src = vertexColors && vi * 4 + 3 < vertexColors.length ? vertexColors : mesh.colors;
