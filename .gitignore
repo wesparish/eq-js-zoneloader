@@ -1,0 +1,3 @@
+# NPC/player models. The engine never loads these — character rendering needs
+# skeletal animation (0x10/0x11/0x12 fragments), which isn't implemented.
+data/*_chr.s3d

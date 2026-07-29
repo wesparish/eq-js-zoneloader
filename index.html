@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>EQ Zone Walker — Blackburrow</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22><text y=%2213%22 font-size=%2213%22>&#x1F332;</text></svg>">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #07090b; }
+  body { font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #d7dde3; }
+  #gl { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+
+  .panel {
+    position: fixed; background: rgba(10, 13, 16, .78); border: 1px solid rgba(255,255,255,.10);
+    border-radius: 8px; padding: 10px 12px; backdrop-filter: blur(8px); pointer-events: none;
+  }
+  #stats { top: 12px; left: 12px; color: #9fb0bf; width: 250px; pointer-events: auto; }
+  #statsBody { margin-top: 8px; }
+  #zoneSelect {
+    width: 100%; padding: 5px 6px; font: inherit; font-size: 12px; cursor: pointer;
+    color: #e8eef4; background: #161c22; border: 1px solid #2e3841; border-radius: 5px;
+  }
+  #zoneSelect:hover { border-color: #3d4954; }
+  #zoneSelect:disabled { opacity: .5; cursor: wait; }
+  #stats b { color: #e8eef4; }
+  #readout { top: 12px; right: 12px; text-align: right; color: #9fb0bf; }
+  #readout b { color: #7fd4a0; font-variant-numeric: tabular-nums; }
+  #settings {
+    bottom: 12px; left: 12px; color: #8c9aa8; pointer-events: auto;
+    width: 250px; max-height: calc(100vh - 200px); overflow-y: auto;
+  }
+  #settings.collapsed .setting-body { display: none; }
+  #settingsHead {
+    display: flex; align-items: center; justify-content: space-between;
+    cursor: pointer; user-select: none; color: #cfd8e0;
+  }
+  #settingsHead .chev { color: #6b7b89; }
+  .setting-body { margin-top: 10px; }
+  .setting-group {
+    margin: 0 0 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.07);
+  }
+  .setting-group:first-child { border-top: 0; padding-top: 0; }
+  .setting-group h4 {
+    margin: 0 0 6px; font-size: 10px; font-weight: 600; letter-spacing: .12em;
+    text-transform: uppercase; color: #5f6e7c;
+  }
+  .slider { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; margin-bottom: 7px; }
+  .slider label { font-size: 12px; color: #9fb0bf; }
+  .slider output { font-size: 12px; color: #e0c58a; font-variant-numeric: tabular-nums; }
+  .slider input { grid-column: 1 / -1; }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 3px;
+    background: #2a343d; border-radius: 2px; outline: none; margin: 3px 0 0;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
+    background: #7fd4a0; cursor: pointer;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 12px; height: 12px; border: 0; border-radius: 50%; background: #7fd4a0; cursor: pointer;
+  }
+  .toggle {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 5px;
+    font-size: 12px; color: #9fb0bf; cursor: pointer;
+  }
+  .toggle input { accent-color: #7fd4a0; margin: 0; cursor: pointer; }
+  .key {
+    font-size: 10px; color: #5f6e7c; border: 1px solid #2e3841;
+    border-radius: 3px; padding: 0 4px;
+  }
+  .toggle .key { margin-left: auto; }
+  #resetBtn {
+    width: 100%; margin-top: 2px; padding: 5px; cursor: pointer; font: inherit; font-size: 12px;
+    color: #9fb0bf; background: #161c22; border: 1px solid #2e3841; border-radius: 5px;
+  }
+  #resetBtn:hover { color: #e8eef4; border-color: #3d4954; }
+  #help { bottom: 12px; right: 12px; color: #8c9aa8; max-width: 300px; }
+  #help.hidden { display: none; }
+  #help kbd {
+    background: #1c232a; border: 1px solid #2e3841; border-bottom-width: 2px; border-radius: 4px;
+    padding: 0 5px; color: #cfd8e0; font: inherit; font-size: 12px;
+  }
+  #help table { border-collapse: collapse; }
+  #help td { padding: 2px 0; vertical-align: top; }
+  #help td:first-child { padding-right: 10px; white-space: nowrap; }
+
+  #crosshair {
+    position: fixed; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px;
+    pointer-events: none; display: none;
+  }
+  #crosshair::before, #crosshair::after {
+    content: ''; position: absolute; background: rgba(255,255,255,.55);
+  }
+  #crosshair::before { left: 6px; top: 0; width: 2px; height: 14px; }
+  #crosshair::after { top: 6px; left: 0; height: 2px; width: 14px; }
+
+  #clickHint {
+    position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    padding: 8px 16px; border-radius: 999px; background: rgba(10,13,16,.8);
+    border: 1px solid rgba(255,255,255,.12); color: #b9c6d2; pointer-events: none;
+  }
+
+  #loader {
+    position: fixed; inset: 0; display: grid; place-content: center; gap: 14px; justify-items: center;
+    background: #07090b; z-index: 10; text-align: center;
+  }
+  #loader h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #e8eef4; }
+  #loadText { color: #7d8b98; }
+  #loadText code { color: #e0c58a; }
+  .spinner {
+    width: 26px; height: 26px; border: 2px solid #1e262e; border-top-color: #7fd4a0;
+    border-radius: 50%; animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #picker { display: none; }
+  #picker input { color: #9fb0bf; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="crosshair"></div>
+<div id="clickHint">click to look around</div>
+
+<div class="panel" id="stats">
+  <select id="zoneSelect"></select>
+  <div id="statsBody">loading…</div>
+</div>
+<div class="panel" id="readout"></div>
+<div class="panel" id="settings">
+  <div id="settingsHead"><span>settings</span><span class="chev">▾</span></div>
+  <div class="setting-body"></div>
+</div>
+
+<div class="panel" id="help">
+  <table>
+    <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>move</td></tr>
+    <tr><td><kbd>mouse</kbd></td><td>look (click to capture, <kbd>esc</kbd> to release)</td></tr>
+    <tr><td><kbd>shift</kbd></td><td>run</td></tr>
+    <tr><td><kbd>space</kbd></td><td>jump / ascend</td></tr>
+    <tr><td><kbd>ctrl</kbd></td><td>descend (noclip)</td></tr>
+    <tr><td><kbd>F</kbd></td><td>toggle noclip</td></tr>
+    <tr><td><kbd>R</kbd></td><td>respawn</td></tr>
+    <tr><td><kbd>O</kbd></td><td>toggle placed objects</td></tr>
+    <tr><td><kbd>C</kbd></td><td>toggle backface culling</td></tr>
+    <tr><td><kbd>L</kbd></td><td>toggle baked vertex lighting</td></tr>
+    <tr><td><kbd>[</kbd> <kbd>]</kbd></td><td>brightness</td></tr>
+    <tr><td><kbd>-</kbd> <kbd>=</kbd></td><td>zone ambient light</td></tr>
+    <tr><td><kbd>tab</kbd></td><td>show/hide settings</td></tr>
+    <tr><td><kbd>H</kbd></td><td>hide this panel</td></tr>
+  </table>
+</div>
+
+<div id="loader">
+  <div class="spinner"></div>
+  <h1>EverQuest Zone Walker</h1>
+  <div id="loadText">starting…</div>
+  <div id="picker">
+    <input type="file" id="files" multiple accept=".s3d">
+  </div>
+</div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

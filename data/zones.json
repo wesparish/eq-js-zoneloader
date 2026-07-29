@@ -1,0 +1,11 @@
+[
+  { "id": "blackburrow", "name": "Blackburrow", "note": "gnoll warren",
+    "parts": ["blackburrow.s3d", "blackburrow_obj.s3d", "blackburrow_2_obj.s3d"],
+    "spawn": [-155.0, -30.0, 59.0, 1.62] },
+  { "id": "neriaka", "name": "Neriak Foreign Quarter", "note": "dark elf city",
+    "parts": ["neriaka.s3d", "neriaka_obj.s3d"],
+    "spawn": [116.7, -169.8, 19.8, 4.71] },
+  { "id": "rivervale", "name": "Rivervale", "note": "halfling village",
+    "parts": ["rivervale.s3d", "rivervale_obj.s3d"],
+    "spawn": [2.6, -330.2, 9.5, 2.09] }
+]
