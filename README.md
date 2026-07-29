@@ -10,6 +10,26 @@ Four zones ship in `data/`, switchable from a dropdown without a page reload:
 
 **[Live demo](https://wesparish.github.io/eq-js-zoneloader/)** — loads in a few seconds, no install.
 
+## Vibe-coded in 3 prompts
+
+This started as "what's in this directory?" and was a working, textured, walkable engine
+25 minutes later — three prompts, no prior knowledge of the file formats on either side.
+Everything here (PFS archive reader, DEFLATE decoder, WLD parser, BMP/DDS decoders, WebGL2
+renderer, collision) was written from scratch by [Claude Code](https://claude.com/claude-code)
+by reverse-engineering the actual bytes of the game files.
+
+| # | Duration | Prompt | API calls | Output tok | Cost |
+|---|---|---|---|---|---|
+| 1 | 0m23s | look in this directory for files about blackburrow | 6 | 1,719 | $0.26 |
+| 2 | 1m35s | inspect them and see if you can read their formatting | 12 | 14,019 | $0.70 |
+| 3 | 22m55s | build a static html file with a JS first-person engine | 151 | 239,081 | $16.24 |
+| | **24m53s** | **3 prompts** | **169** | **254,819** | **$17.20** |
+
+Timings and token counts are from the session transcript; cost is the API list-price
+equivalent at Claude Opus 5 rates. Later prompts added the extra zones, a settings panel,
+and a texture-orientation fix — but the engine in row 3 already loaded and rendered
+Blackburrow with working collision.
+
 ## Running
 
 ```bash
