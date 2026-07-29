@@ -1,3 +1,5 @@
-# NPC/player models. The engine never loads these — character rendering needs
-# skeletal animation (0x10/0x11/0x12 fragments), which isn't implemented.
+# NPC/player model archives. Only zones that actually place NPCs need one:
+# blackburrow_chr.s3d carries the gnoll/bear/snake models and is checked in.
+# The rest are dead weight.
 data/*_chr.s3d
+!data/blackburrow_chr.s3d

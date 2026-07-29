@@ -8,7 +8,7 @@ export class CollisionWorld {
   constructor(batches) {
     const tris = [];
     for (const b of batches) {
-      if (b.isObject) continue;
+      if (b.isObject || b.isNpc) continue;
       // Water surfaces and other blended materials are walk-through.
       if (b.material.mode !== 0x01 && b.material.mode !== 0x13 && b.material.mode !== 0x553) continue;
       for (let i = 0; i < b.indices.length; i += 3) {

@@ -231,6 +231,58 @@ const PARSERS = {
   // 0x2D MeshReference
   0x2d: (f, r) => { f.ref = r.i32(); },
 
+  // 0x10 SkeletonHierarchy — the bone tree for a character model.
+  0x10: (f, r) => {
+    const flags = r.u32();
+    const boneCount = r.u32();
+    f.polyhedronRef = r.i32();
+    if (flags & 0x01) { r.i32(); r.i32(); r.i32(); }
+    if (flags & 0x02) f.boundingRadius = r.f32();
+    f.bones = [];
+    for (let i = 0; i < boneCount; i++) {
+      const bone = {
+        nameRef: r.i32(), flags: r.u32(),
+        trackRef: r.i32(),   // -> 0x13 -> 0x12
+        meshRef: r.i32(),    // -> 0x2D, when a mesh hangs off this bone
+        children: [],
+      };
+      const childCount = r.u32();
+      for (let c = 0; c < childCount; c++) bone.children.push(r.i32());
+      f.bones.push(bone);
+    }
+    // Meshes belonging to this skeleton: body first, then head/variant meshes.
+    f.meshRefs = [];
+    if (flags & 0x200) {
+      const count = r.u32();
+      for (let i = 0; i < count; i++) f.meshRefs.push(r.i32());
+    }
+  },
+
+  // 0x11 SkeletonHierarchyReference
+  0x11: (f, r) => { f.ref = r.i32(); },
+
+  // 0x12 TrackDef — animation frames. Frame 0 is the bind pose.
+  0x12: (f, r) => {
+    r.u32(); // flags
+    const frameCount = r.u32();
+    f.frames = [];
+    for (let i = 0; i < frameCount; i++) {
+      // Eight int16s. The trailing value is the shift denominator: ALL_TRACKDEF
+      // has a zero there with a nonzero leading value, which only parses if the
+      // rotation denominator comes first.
+      const rw = r.i16(), rx = r.i16(), ry = r.i16(), rz = r.i16();
+      const sx = r.i16(), sy = r.i16(), sz = r.i16(), sd = r.i16();
+      const t = sd !== 0 ? 1 / sd : 0;
+      f.frames.push({
+        translation: [sx * t, sy * t, sz * t],
+        rotation: [rx, ry, rz, rw], // normalized at use; (0,0,0,denom) is identity
+      });
+    }
+  },
+
+  // 0x13 TrackReference
+  0x13: (f, r) => { f.ref = r.i32(); },
+
   // 0x32 VertexColorList — per-instance baked lighting for a placed object.
   0x32: (f, r) => {
     r.i32();

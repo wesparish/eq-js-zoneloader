@@ -5,6 +5,7 @@
 
 import { parseWLD, materialTextures } from './wld.js';
 import { decodeImage } from './textures.js';
+import { buildCharacters, variantMaterial } from './skeleton.js';
 
 export const RENDER = {
   INVISIBLE: 0x00,
@@ -242,4 +243,124 @@ export function buildZone(zoneArchive, objArchives, opts = {}) {
   }
 
   return { batches, textures, bounds, stats, zoneWld, objectPositions: new Float32Array(objectPositions) };
+}
+
+/**
+ * Builds batches for NPC spawns. `chrArchive` is the zone's _chr.s3d, `spawns`
+ * the entries from data/<zone>_npcs.json. Characters are drawn in their bind
+ * pose — no skeletal animation — and are decorative only (no collision).
+ */
+export function buildNPCs(chrArchive, spawns, textures) {
+  const wldName = [...chrArchive.keys()].find((n) => n.endsWith('.wld'));
+  if (!wldName) return { batches: [], stats: { placed: 0, missing: new Set() } };
+  const wld = parseWLD(chrArchive.get(wldName));
+  const models = buildCharacters(wld, [chrArchive], textures);
+
+  const builder = new BatchBuilder();
+  const labels = [];
+  const stats = { placed: 0, tris: 0, missing: new Set(), byModel: {} };
+  const matCache = new Map();
+  const metrics = new Map();
+
+  // The spawn table's Z is the model *origin* (mid-body), not the feet — the
+  // measured median gap from spawn Z to the local floor is 3.8, which is the
+  // gnoll's own origin-to-foot distance. Offsetting by footZ on top of that
+  // lifted every NPC a body-height off the ground.
+  const metricsFor = (model) => {
+    let m = metrics.get(model.code);
+    if (m) return m;
+    let lo = Infinity, hi = -Infinity;
+    for (const entry of model.meshes) {
+      const p = entry.mesh.positions;
+      for (let i = 2; i < p.length; i += 3) { lo = Math.min(lo, p[i]); hi = Math.max(hi, p[i]); }
+    }
+    m = { footZ: lo, height: Math.max(hi - lo, 0.001) };
+    metrics.set(model.code, m);
+    return m;
+  };
+
+  // EQ's `size` is a multiplier against a nominal base of 6 (default human
+  // size), not an absolute height. Deriving scale from the model's own bounding
+  // box instead makes long, flat models explode — a snake's Z extent is ~1.3,
+  // so size 6 would scale it 4.6x into a 70-unit serpent.
+  const BASE_SIZE = 6;
+
+  for (const spawn of spawns) {
+    const model = models.get(spawn.model);
+    if (!model) { stats.missing.add(spawn.model); continue; }
+    const { footZ } = metricsFor(model);
+    const scale = (spawn.size || BASE_SIZE) / BASE_SIZE;
+
+    // The spawn table carries no heading, so derive a stable pseudo-heading
+    // from the position — better than every NPC facing due north.
+    const heading = ((Math.sin(spawn.x * 12.9898 + spawn.y * 78.233) * 43758.5453) % 1 + 1) % 1 * Math.PI * 2;
+    const c = Math.cos(heading) * scale, s = Math.sin(heading) * scale;
+    const xform = [
+      c, s, 0, 0,
+      -s, c, 0, 0,
+      0, 0, scale, 0,
+      spawn.x, spawn.y, spawn.z, 1,
+    ];
+    const nxform = normalMatrixOf(xform);
+
+    // Body plus one head variant; models with several heads pick by texture.
+    const heads = model.meshes.filter((m) => /HE\d\d_DMSPRITEDEF$/.test(m.name));
+    const head = heads.length ? heads[Math.min(spawn.texture || 0, heads.length - 1)] : null;
+    const parts = model.meshes.filter((m) => !heads.includes(m)).concat(head ? [head] : []);
+
+    stats.placed++;
+    stats.byModel[spawn.model] = (stats.byModel[spawn.model] || 0) + 1;
+
+    // Nameplate anchor: just above the model's crown, in GL space.
+    const { height } = metricsFor(model);
+    const topZ = spawn.z + (footZ + height) * scale + 0.6;
+    labels.push({
+      name: spawn.name,
+      level: spawn.level,
+      // Proper-named NPCs (no leading article) are the rare/named mobs.
+      named: !/^(a|an|the)\s/i.test(spawn.name),
+      pos: [spawn.x, topZ, -spawn.y],
+    });
+
+    for (const part of parts) {
+      const key = `${part.materialListRef}:${spawn.texture}`;
+      let mats = matCache.get(key);
+      if (!mats) {
+        mats = resolveMaterials(wld, wld.fragments[part.materialListRef], [chrArchive], textures)
+          .map((mat) => {
+            if (!mat) return mat;
+            // Swap in the NPC's texture variant when that material exists.
+            const alt = variantMaterial(mat.name, spawn.texture);
+            if (alt === mat.name) return mat;
+            const altFrag = wld.byName.get(alt);
+            if (!altFrag) return mat;
+            const info = materialTextures(wld, altFrag);
+            const frames = info.files.filter((f) => textures.get(f));
+            return frames.length ? { ...mat, name: alt, frames } : mat;
+          });
+        matCache.set(key, mats);
+      }
+      let tri = 0;
+      for (const run of part.mesh.polyRuns) {
+        const mat = mats[run.material];
+        if (!mat || !mat.frames.length || mat.mode === RENDER.INVISIBLE) { tri += run.count; continue; }
+        const batch = builder.get(`n:${mat.name}`, { material: mat, isNpc: true });
+        builder.addRun(batch, part.mesh, tri, run.count, xform, nxform, null);
+        stats.tris += run.count;
+        tri += run.count;
+      }
+    }
+  }
+
+  const batches = [...builder.batches.values()].map((b) => ({
+    material: b.material,
+    isObject: false,
+    isNpc: true,
+    positions: new Float32Array(b.positions),
+    uvs: new Float32Array(b.uvs),
+    normals: new Float32Array(b.normals),
+    colors: new Float32Array(b.colors),
+    indices: new Uint32Array(b.indices),
+  }));
+  return { batches, labels, stats };
 }

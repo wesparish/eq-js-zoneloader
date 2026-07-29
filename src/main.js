@@ -1,5 +1,5 @@
 import { readPFS } from './pfs.js';
-import { buildZone } from './zone.js';
+import { buildZone, buildNPCs } from './zone.js';
 import { CollisionWorld } from './collision.js';
 import { Renderer } from './renderer.js';
 
@@ -25,6 +25,9 @@ const state = {
     headlamp: 0.22,
     vertexColor: true,
     showObjects: true,
+    showNpcs: true,
+    showNames: true,
+    nameDistance: 250,
     cull: false,
     fogColor: [0.03, 0.04, 0.05],
     fogStart: 400,
@@ -142,6 +145,7 @@ async function loadZoneList(current) {
 }
 
 async function loadZone(buffers, zoneName, displayName) {
+  setNameplates([]);
   await progress('Decompressing archives…');
   const [zoneBuf, objBuf, obj2Buf] = buffers;
   if (!zoneBuf) throw new Error(`missing ${zoneName}.s3d`);
@@ -154,6 +158,28 @@ async function loadZone(buffers, zoneName, displayName) {
   const t0 = performance.now();
   zoneData = buildZone(zoneArc, objArcs);
   const buildMs = performance.now() - t0;
+
+  // NPC spawns (optional): character models from <zone>_chr.s3d posed at the
+  // coordinates in <zone>_npcs.json. Purely decorative — no collision.
+  let npcStats = null;
+  const meta = zoneList.find((z) => z.id === zoneName) || {};
+  if (meta.chr && meta.npcs) {
+    await progress('Placing NPCs…');
+    try {
+      const [chrBuf, spawnRes] = await Promise.all([
+        fetch(`data/${meta.chr}`).then((r) => (r.ok ? r.arrayBuffer() : null)),
+        fetch(`data/${meta.npcs}`).then((r) => (r.ok ? r.json() : null)),
+      ]);
+      if (chrBuf && spawnRes) {
+        const npc = buildNPCs(readPFS(new Uint8Array(chrBuf)), spawnRes.spawns, zoneData.textures);
+        zoneData.batches.push(...npc.batches);
+        npcStats = npc.stats;
+        setNameplates(npc.labels);
+      }
+    } catch (e) {
+      console.warn('NPC load failed:', e);
+    }
+  }
 
   await progress('Uploading textures…');
   const batchCount = renderer.load(zoneData);
@@ -168,6 +194,7 @@ async function loadZone(buffers, zoneName, displayName) {
     `${s.zoneMeshes} meshes → ${batchCount} batches`,
     `${(s.zoneTris + s.objectTris).toLocaleString()} triangles`,
     `${s.objectInstances} placed objects`,
+    ...(npcStats ? [`${npcStats.placed} NPC spawns`] : []),
     `${zoneData.textures.size} textures`,
     `${collision.tris.length.toLocaleString()} collision tris`,
     `built in ${buildMs.toFixed(0)} ms`,
@@ -276,6 +303,8 @@ function setupInput(canvas) {
     if (e.code === 'KeyF') flip('noclip');
     if (e.code === 'KeyR') spawn();
     if (e.code === 'KeyO') flip('showObjects');
+    if (e.code === 'KeyN') flip('showNpcs');
+    if (e.code === 'KeyM') flip('showNames');
     if (e.code === 'KeyC') flip('cull');
     if (e.code === 'KeyL') flip('vertexColor');
     if (e.code === 'BracketLeft') bump('brightness', -0.1);
@@ -374,6 +403,9 @@ const SETTINGS = [
   { key: 'fogStart', label: 'Fog start', min: 0, max: 3000, step: 25 },
   { key: 'fogEnd', label: 'Fog end', min: 100, max: 4000, step: 25 },
   { key: 'showObjects', label: 'Placed objects', toggle: true, keys: 'O' },
+  { key: 'showNpcs', label: 'NPC spawns', toggle: true, keys: 'N' },
+  { key: 'showNames', label: 'NPC nameplates', toggle: true, keys: 'M' },
+  { key: 'nameDistance', label: 'Nameplate range', min: 50, max: 800, step: 10 },
   { key: 'cull', label: 'Backface culling', toggle: true, keys: 'C' },
 
   { group: 'Movement' },
@@ -461,11 +493,103 @@ function updateHud() {
   }
 }
 
+// --- nameplates ---------------------------------------------------------------
+//
+// Drawn as DOM nodes rather than textured quads: crisp at any resolution and
+// free of the depth-sorting problems billboards bring. Each frame the anchor is
+// projected to screen space; occlusion uses the collision mesh so names don't
+// bleed through terrain, with the raycasts staggered across frames.
+
+let nameplates = [];
+
+function setNameplates(labels) {
+  const host = $('nameplates');
+  host.textContent = '';
+  nameplates = (labels || []).map((label) => {
+    const el = document.createElement('div');
+    el.className = label.named ? 'np named' : 'np';
+    el.textContent = label.name;
+    const lvl = document.createElement('small');
+    lvl.textContent = `level ${label.level}`;
+    el.appendChild(lvl);
+    el.style.display = 'none';
+    host.appendChild(el);
+    return { label, el, shown: false, occluded: false, size: 0 };
+  });
+}
+
+const OCCLUSION_STRIDE = 6; // each plate re-tests every N frames
+
+// Plates keep a constant pixel size past FAR_DIST, so they appear to grow
+// relative to the model as you back away — deliberate, and what makes distant
+// NPCs readable. Up close that same fixed size reads as too small, so scale up
+// over the near range only and taper back to the baseline.
+const NAME_NEAR_DIST = 25, NAME_FAR_DIST = 90;
+const NAME_NEAR_PX = 17, NAME_FAR_PX = 12;
+
+function nameplateSize(dist) {
+  const t = Math.min(1, Math.max(0, (dist - NAME_NEAR_DIST) / (NAME_FAR_DIST - NAME_NEAR_DIST)));
+  return NAME_NEAR_PX + (NAME_FAR_PX - NAME_NEAR_PX) * t;
+}
+
+function updateNameplates(vp, eye, w, h, frame) {
+  const host = $('nameplates');
+  const on = state.opts.showNames && state.opts.showNpcs && nameplates.length;
+  if (!on) {
+    if (host.style.visibility !== 'hidden') host.style.visibility = 'hidden';
+    return;
+  }
+  host.style.visibility = '';
+  const maxDist = state.opts.nameDistance;
+  const fadeFrom = maxDist * 0.7;
+
+  for (let i = 0; i < nameplates.length; i++) {
+    const np = nameplates[i];
+    const p = np.label.pos;
+    const dx = p[0] - eye[0], dy = p[1] - eye[1], dz = p[2] - eye[2];
+    const dist = Math.hypot(dx, dy, dz);
+    let show = dist < maxDist && dist > 0.01;
+    let sx = 0, sy = 0;
+
+    if (show) {
+      const cw = vp[3] * p[0] + vp[7] * p[1] + vp[11] * p[2] + vp[15];
+      if (cw <= 0.001) {
+        show = false; // behind the camera
+      } else {
+        const nx = (vp[0] * p[0] + vp[4] * p[1] + vp[8] * p[2] + vp[12]) / cw;
+        const ny = (vp[1] * p[0] + vp[5] * p[1] + vp[9] * p[2] + vp[13]) / cw;
+        if (nx < -1.15 || nx > 1.15 || ny < -1.15 || ny > 1.15) show = false;
+        sx = (nx * 0.5 + 0.5) * w;
+        sy = (1 - (ny * 0.5 + 0.5)) * h;
+      }
+    }
+
+    if (show && collision && i % OCCLUSION_STRIDE === frame % OCCLUSION_STRIDE) {
+      const hit = collision.raycast(eye[0], eye[1], eye[2], dx / dist, dy / dist, dz / dist, dist);
+      np.occluded = hit < dist - 1.5;
+    }
+    if (np.occluded) show = false;
+
+    if (!show) {
+      if (np.shown) { np.el.style.display = 'none'; np.shown = false; }
+      continue;
+    }
+    if (!np.shown) { np.el.style.display = ''; np.shown = true; }
+    const size = nameplateSize(dist);
+    if (Math.abs(size - np.size) > 0.25) { // avoid restyling every frame
+      np.el.style.fontSize = `${size.toFixed(1)}px`;
+      np.size = size;
+    }
+    np.el.style.transform = `translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px) translate(-50%, -100%)`;
+    np.el.style.opacity = dist > fadeFrom ? String(Math.max(0, 1 - (dist - fadeFrom) / (maxDist - fadeFrom)).toFixed(2)) : '1';
+  }
+}
+
 // --- main loop ---------------------------------------------------------------
 
 function start(canvas) {
   let last = performance.now();
-  let fpsAccum = 0, fpsFrames = 0, fps = 0;
+  let fpsAccum = 0, fpsFrames = 0, fps = 0, frameNo = 0;
 
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
@@ -483,6 +607,9 @@ function start(canvas) {
     const proj = perspective((state.opts.fov * Math.PI) / 180, canvas.width / Math.max(canvas.height, 1), 0.5, 4000);
     const view = lookDir(eye, state.yaw, state.pitch);
     const vp = multiply(proj, view);
+
+    frameNo++;
+    updateNameplates(vp, eye, canvas.clientWidth, canvas.clientHeight, frameNo);
 
     let info = { calls: 0, tris: 0 };
     if (renderer.drawables.length) {

@@ -85,6 +85,19 @@
   #help td { padding: 2px 0; vertical-align: top; }
   #help td:first-child { padding-right: 10px; white-space: nowrap; }
 
+  #nameplates {
+    position: fixed; inset: 0; pointer-events: none; overflow: hidden;
+    font-size: 12px; line-height: 1.1; white-space: nowrap;
+  }
+  .np {
+    position: absolute; transform: translate(-50%, -100%); text-align: center;
+    color: #dbe6f0; text-shadow: 0 0 3px #000, 0 0 3px #000, 0 1px 2px #000;
+    will-change: transform, opacity;
+  }
+  .np.named { color: #ffd479; font-weight: 600; }
+  .np small { display: block; font-size: 0.82em; color: #93a5b5; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+  .np.named small { color: #c9a25a; }
+
   #crosshair {
     position: fixed; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px;
     pointer-events: none; display: none;
@@ -120,6 +133,7 @@
 <body>
 <canvas id="gl"></canvas>
 
+<div id="nameplates"></div>
 <div id="crosshair"></div>
 <div id="clickHint">click to look around</div>
 

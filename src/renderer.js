@@ -161,6 +161,7 @@ export class Renderer {
         alpha, cutoff: masked ? 0.5 : 0.0,
         blended: alpha < 1.0,
         isObject: b.isObject,
+        isNpc: !!b.isNpc,
         name: mat.name,
         delayMs: mat.delayMs,
       };
@@ -197,6 +198,7 @@ export class Renderer {
       for (const d of this.drawables) {
         if ((pass === 1) !== d.blended) continue;
         if (d.isObject && !opts.showObjects) continue;
+        if (d.isNpc && !opts.showNpcs) continue;
         if (pass === 1) {
           gl.enable(gl.BLEND);
           gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
