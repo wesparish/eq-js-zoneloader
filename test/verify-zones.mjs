@@ -4,7 +4,7 @@ const pick = (id) => `(()=>{const s=document.getElementById('zoneSelect');
   s.value=${JSON.stringify(id)}; s.dispatchEvent(new Event('change',{bubbles:true})); return true;})()`;
 const wait = `document.getElementById("loader").style.display === "none"`;
 const r = await drive({
-  url: 'http://localhost:8731/index.html',
+  url: process.argv[2] || 'http://localhost:8731/index.html',
   readyExpr: wait,
   before: `document.getElementById('help').classList.add('hidden');
            document.getElementById('settings').classList.add('collapsed'); true`,

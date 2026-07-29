@@ -7,5 +7,5 @@
     "spawn": [116.7, -169.8, 19.8, 4.71] },
   { "id": "rivervale", "name": "Rivervale", "note": "halfling village",
     "parts": ["rivervale.s3d", "rivervale_obj.s3d"],
-    "spawn": [2.6, -330.2, 9.5, 2.09] }
+    "spawn": [-185.2, -207.6, 16.0, 1.05] }
 ]
