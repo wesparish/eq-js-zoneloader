@@ -32,6 +32,7 @@ const state = {
     fov: 60,
     moveSpeed: 45,
     sensitivity: 1,
+    invertY: false,
   },
 };
 
@@ -295,8 +296,9 @@ function setupInput(canvas) {
   addEventListener('mousemove', (e) => {
     if (document.pointerLockElement !== canvas) return;
     const sens = 0.0022 * state.opts.sensitivity;
+    const invert = state.opts.invertY ? -1 : 1;
     state.yaw += e.movementX * sens;
-    state.pitch = Math.max(-1.55, Math.min(1.55, state.pitch - e.movementY * sens));
+    state.pitch = Math.max(-1.55, Math.min(1.55, state.pitch - e.movementY * sens * invert));
   });
 }
 
@@ -377,6 +379,7 @@ const SETTINGS = [
   { group: 'Movement' },
   { key: 'moveSpeed', label: 'Move speed', min: 10, max: 250, step: 5 },
   { key: 'sensitivity', label: 'Mouse sensitivity', min: 0.2, max: 4, step: 0.05, unit: '×' },
+  { key: 'invertY', label: 'Invert mouse Y', toggle: true },
   { key: 'noclip', label: 'Noclip (fly through walls)', toggle: true, keys: 'F', onState: true },
 ];
 

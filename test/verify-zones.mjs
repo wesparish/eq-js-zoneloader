@@ -10,6 +10,7 @@ const r = await drive({
            document.getElementById('settings').classList.add('collapsed'); true`,
   screenshot: '/tmp/z_blackburrow.png',
   shots: [
+    { expr: pick('qeynos'), path: '/tmp/z_qeynos.png', settleMs: 14000 },
     { expr: pick('neriaka'), path: '/tmp/z_neriaka.png', settleMs: 9000 },
     { expr: pick('rivervale'), path: '/tmp/z_rivervale.png', settleMs: 9000 },
     { expr: pick('blackburrow'), path: '/tmp/z_back.png', settleMs: 9000 },

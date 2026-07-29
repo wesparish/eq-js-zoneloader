@@ -4,9 +4,9 @@ A dependency-free, first-person WebGL2 viewer for original EverQuest zone data. 
 the shipped `.s3d` archives directly in the browser — no conversion step, no build step,
 no libraries — and lets you walk around the zone with WASD and mouselook.
 
-Three zones ship in `data/`, switchable from a dropdown without a page reload:
-**Blackburrow** (gnoll warren), **Neriak Foreign Quarter** (dark elf city) and
-**Rivervale** (halfling village).
+Four zones ship in `data/`, switchable from a dropdown without a page reload:
+**Blackburrow** (gnoll warren), **South Qeynos** (human capital),
+**Neriak Foreign Quarter** (dark elf city) and **Rivervale** (halfling village).
 
 **[Live demo](https://wesparish.github.io/eq-js-zoneloader/)** — loads in a few seconds, no install.
 
@@ -59,7 +59,8 @@ and won't load.
 | `H` | hide the help panel |
 
 The settings panel exposes lighting, fog, FOV, move speed and mouse sensitivity as
-sliders, with a reset button. `window.eq` is available in the console — `eq.tp(x, y, z)`
+sliders, plus toggles for placed objects, backface culling, baked lighting, inverted
+mouse Y and noclip, with a reset button. `window.eq` is available in the console — `eq.tp(x, y, z)`
 teleports using EQ coordinates.
 
 ## How it works
